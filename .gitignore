@@ -1,6 +1,6 @@
 # cache stuff
 __pycache__/
 
-# Extra exploration
-test_encodec_processor_24khz.ipynb
-test_encodec_processor_48khz.ipynb
+# directories
+samples/
+old_stuff/

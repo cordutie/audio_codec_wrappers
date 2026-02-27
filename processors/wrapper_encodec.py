@@ -12,7 +12,12 @@ supporting both the continuous path (used by AudioBox) and quantized path (stand
 
 import torch
 import torchaudio
-from encodec import EncodecModel
+# Use the standalone `encodec` package for the original torchaudio-style EncodecModel
+try:
+    from encodec import EncodecModel as TorchEncodecModel
+except Exception:
+    TorchEncodecModel = None
+
 from transformers import EncodecModel as HFEncodecModel, AutoProcessor
 import numpy as np
 from typing import Optional, Tuple, Union
@@ -29,22 +34,29 @@ class EncodecProcessor:
     - Support for both 24kHz and 48kHz models
     """
     
-    def __init__(self, sr: int = 24000, device: Optional[str] = None):
+    def __init__(self, sr: int = 24000, device: Optional[str] = None, streamable: bool = False, chunk_length_s: Optional[int] = None, overlap: Optional[int] = None):
         """
         Initialize the EnCodec processor.
         
         Args:
             sr: Sample rate (24000 for 24kHz model, 48000 for 48kHz model)
             device: Device to run the model on ('cuda', 'cpu', or None for auto-detect)
+            streamable: If True, disable chunking for streamable processing.
+                       For 24kHz: already streamable by default
+                       For 48kHz: disables 1-second chunks, processes entire audio at once
         """
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.target_sr = sr
+        self.streamable = streamable
         
         print(f"Initializing EnCodec processor on device: {self.device}")
+        print(f"Streamable mode: {streamable}")
         
         if sr == 24000:
-            # Load EnCodec 24kHz model (torchaudio version)
-            self.model = EncodecModel.encodec_model_24khz()
+            # Load EnCodec 24kHz model (local `encodec` package)
+            if TorchEncodecModel is None:
+                raise ImportError("The 'encodec' package is required for 24kHz EnCodec support. Install it with `pip install encodec`.")
+            self.model = TorchEncodecModel.encodec_model_24khz()
             self.model.eval()
             self.model = self.model.to(self.device)
             self.sample_rate = self.model.sample_rate  # 24000 Hz
@@ -57,13 +69,35 @@ class EncodecProcessor:
             # Load EnCodec 48kHz model (HuggingFace Transformers version)
             self.model = HFEncodecModel.from_pretrained("facebook/encodec_48khz")
             self.processor = AutoProcessor.from_pretrained("facebook/encodec_48khz")
+            
+            # Enable streamable mode if requested
+            if streamable:
+                print("  → Enabling streamable mode (disabling chunking)")
+                if chunk_length_s is not None or overlap is not None:
+                    print("     Note: chunk_length_s and overlap parameters are ignored in streamable mode.")
+                self.model.config.chunk_length_s = None
+                self.model.config.overlap = None
+                # Also update the processor to not add chunking padding
+                self.processor.chunk_length_s = None
+                self.processor.overlap = None
+            else:
+                # If not streamable, set chunking parameters (default 1s chunks with 1% overlap)
+                chunk_length_s = chunk_length_s if chunk_length_s is not None else 1.0
+                overlap = overlap if overlap is not None else 0.01
+                print(f"  → Enabling chunked mode with chunk_length_s={chunk_length_s}s and overlap={overlap*100}%")
+                self.model.config.chunk_length_s = chunk_length_s
+                self.model.config.overlap = overlap
+                self.processor.chunk_length_s = chunk_length_s
+                self.processor.overlap = overlap
+                
             self.model.eval()
             self.model = self.model.to(self.device)
             self.sample_rate = 48000
-            self.frame_rate = 75  # Approximate frame rate for 48kHz model
+            self.frame_rate = 150  # Approximate frame rate for 48kHz model
             self.model_type = "48kHz"
             self.is_hf_model = True
-            print(f"✓ EnCodec 48kHz model loaded (HuggingFace)")
+            mode = "streamable" if streamable else "chunked (1s chunks, 1% overlap)"
+            print(f"✓ EnCodec 48kHz model loaded (HuggingFace) - {mode}")
             
         else:
             raise ValueError(f"Unsupported sample rate: {sr}. Supported rates: 24000, 48000")
@@ -149,29 +183,66 @@ class EncodecProcessor:
         Returns:
             Continuous embeddings tensor of shape [batch, channels, time_frames]
         """
+        # New: implement as composition via audio_to_latents and return latents only
+        latents, metadata = self.audio_to_latents(audio, sample_rate)
+        # audio_to_latents returns list of chunk embeddings for HF and a single-item list for 24k
+        # Concatenate chunk embeddings along time to produce same shape as original API
+        if isinstance(latents, list):
+            embeddings = torch.cat([l for l in latents], dim=-1)
+        else:
+            embeddings = latents
+        return embeddings
+
+    def audio_to_latents(self, audio: Union[torch.Tensor, np.ndarray], sample_rate: Optional[int] = None):
+        """
+        Convert audio to continuous (pre-quantization) latent embeddings.
+
+        Returns:
+            (latents_list, metadata) where latents_list is a list of tensors (one per chunk)
+            and metadata contains any auxiliary information (e.g. padding_mask, audio_scales placeholder).
+        """
         with torch.no_grad():
             audio_tensor = self._prepare_audio_tensor(audio, sample_rate)
-            
+
             if self.is_hf_model:
-                # HuggingFace 48kHz model - needs CPU tensor for processor
+                # For HF model we must mimic EncodecModel.encode chunking logic so that later
+                # quantization/decoding can operate on the same chunk boundaries.
                 audio_cpu = audio_tensor.cpu().numpy()
                 inputs = self.processor(raw_audio=audio_cpu, sampling_rate=self.sample_rate, return_tensors="pt")
                 input_values = inputs["input_values"].to(self.device)
-                
-                # Apply normalization if the model uses it
-                if self.model.config.normalize:
-                    mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
-                    scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
-                    input_values = input_values / scale
-                
-                # Extract continuous embeddings from encoder (BEFORE quantization!)
-                continuous_embeddings = self.model.encoder(input_values)
+                padding_mask = inputs.get("padding_mask", None)
+
+                cfg = self.model.config
+                chunk_length = cfg.chunk_length if cfg.chunk_length is not None else input_values.shape[-1]
+                stride = cfg.chunk_stride if cfg.chunk_length is not None else input_values.shape[-1]
+
+                embeddings_chunks = []
+                audio_scales = []
+                for offset in range(0, input_values.shape[-1], stride):
+                    frame = input_values[..., offset: offset + chunk_length]
+                    # compute scale and normalize per-frame if needed
+                    if cfg.normalize:
+                        mono = torch.sum(frame, 1, keepdim=True) / frame.shape[1]
+                        scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
+                        norm_frame = frame / scale
+                        audio_scales.append(scale.view(-1, 1))
+                    else:
+                        norm_frame = frame
+                        audio_scales.append(None)
+
+                    emb = self.model.encoder(norm_frame)
+                    embeddings_chunks.append(emb)
+
+                metadata = {
+                    'padding_mask': padding_mask,
+                    'audio_scales': audio_scales,
+                }
+                return embeddings_chunks, metadata
+
             else:
-                # Torchaudio 24kHz model
-                # Extract continuous embeddings from encoder (BEFORE quantization!)
-                continuous_embeddings = self.model.encoder(audio_tensor)
-            
-            return continuous_embeddings
+                # Torchaudio 24kHz model: encoder expects [batch, channels, time] and no chunking
+                embeddings = self.model.encoder(audio_tensor)
+                return [embeddings], None
     
     def encode_audio_codes(self, audio: Union[torch.Tensor, np.ndarray], 
                      kbps: float = 6.0, sample_rate: Optional[int] = None) -> torch.Tensor:
@@ -186,40 +257,56 @@ class EncodecProcessor:
         Returns:
             Discrete codes tensor of shape [batch, num_quantizers, time_frames]
         """
+        # New implementation: compose audio_to_latents -> latents_to_codes
+        latents_list, latents_meta = self.audio_to_latents(audio, sample_rate)
+        codes, metadata = self.latents_to_codes(latents_list, kbps, latents_meta)
+        return codes, metadata
+
+    def latents_to_codes(self, latents_list, kbps: float = 6.0, latents_meta: Optional[dict] = None):
+        """
+        Convert continuous latent embeddings (list of chunk tensors) to discrete codes.
+
+        Returns:
+            codes tensor shaped [nb_frames, batch, nb_quantizers, frame_len], metadata dict for decoding
+        """
         with torch.no_grad():
-            audio_tensor = self._prepare_audio_tensor(audio, sample_rate)
-            
             if self.is_hf_model:
-                # HuggingFace 48kHz model - needs CPU tensor for processor
-                audio_cpu = audio_tensor.cpu().numpy()
-                inputs = self.processor(raw_audio=audio_cpu, sampling_rate=self.sample_rate, return_tensors="pt")
-                input_values = inputs["input_values"].to(self.device)
-                padding_mask = inputs["padding_mask"].to(self.device)
-                
-                # Set target bandwidth
-                self.model.config.target_bandwidths = [kbps]
-                
-                # Standard encode method - includes quantization
-                encoded = self.model.encode(input_values, padding_mask)
-                codes = encoded.audio_codes
+                # HF quantizer.encode(embeddings, bandwidth) returns [num_quantizers, batch, time_frames]
+                codes_chunks = []
+                audio_scales = []
+                for i, emb in enumerate(latents_list):
+                    codes_chunk = self.model.quantizer.encode(emb, kbps)
+                    # transpose to [batch, num_quantizers, time_frames]
+                    codes_chunk = codes_chunk.transpose(0, 1)
+                    codes_chunks.append(codes_chunk)
+                    # audio_scales should be provided by latents_meta if available
+                    if latents_meta is not None:
+                        audio_scales.append(latents_meta.get('audio_scales', [None] * len(latents_list))[i])
+                    else:
+                        audio_scales.append(None)
 
-                # Return codes with metadata needed for proper reconstruction
+                # pad last chunk to match first chunk length if necessary (mimic model.encode behaviour)
+                if len(codes_chunks) > 1:
+                    first_len = codes_chunks[0].shape[-1]
+                    last_len = codes_chunks[-1].shape[-1]
+                    if last_len < first_len:
+                        pad = first_len - last_len
+                        codes_chunks[-1] = torch.nn.functional.pad(codes_chunks[-1], (0, pad), value=0)
+
+                # Stack to [nb_frames, batch, num_quantizers, frame_len]
+                codes = torch.stack(codes_chunks, dim=0)
                 metadata = {
-                    'audio_scales': encoded.audio_scales,
-                    'padding_mask': padding_mask
+                    'audio_scales': audio_scales,
+                    'padding_mask': latents_meta.get('padding_mask') if latents_meta else None,
+                    'last_frame_pad_length': (first_len - last_len) if len(codes_chunks) > 1 else 0,
                 }
-
                 return codes, metadata
+
             else:
-                # Torchaudio 24kHz model
-                # Set target bandwidth
-                self.model.set_target_bandwidth(kbps)
-                
-                # Get continuous embeddings first
-                continuous_embeddings = self.model.encoder(audio_tensor)
-                
-                # Quantize the embeddings
-                codes = self.model.quantizer.encode(continuous_embeddings, self.frame_rate, kbps)
+                # Torchaudio model expects full embeddings tensor
+                embeddings = latents_list[0]
+                # torchaudio quantizer.encode signature: encode(embeddings, frame_rate, bandwidth)
+                codes = self.model.quantizer.encode(embeddings, self.frame_rate, kbps)
                 return codes, None
         
     def decode_codes_emb(self, codes: torch.Tensor) -> torch.Tensor:
@@ -232,43 +319,32 @@ class EncodecProcessor:
         Returns:
             Quantized embeddings tensor of shape [batch, channels, time_frames]
         """
+        # Implement as composition: codes -> latents
+        return self.codes_to_latents(codes)
+
+    def codes_to_latents(self, codes: torch.Tensor) -> torch.Tensor:
+        """
+        Decode discrete codes to quantized embeddings (latents).
+        Accepts codes shaped [nb_frames, batch, nb_quantizers, frame_len] or other shapes produced by model APIs.
+        Returns a single concatenated embeddings tensor [batch, channels, total_time_frames].
+        """
         with torch.no_grad():
             if self.is_hf_model:
-                # HuggingFace 48kHz model
-                # The codes come as [chunks, batch, num_quantizers, time_frames] for chunked encoding
-                # We need to process all chunks and concatenate the results
-                
+                # Expect [chunks, batch, num_quantizers, time_frames]
                 if codes.dim() == 4:
-                    # codes shape: [chunks, batch, num_quantizers, time_frames]
                     chunks, batch_size, num_quantizers, time_frames = codes.shape
-                    
-                    # Process each chunk separately
                     chunk_embeddings = []
-                    for chunk_idx in range(chunks):
-                        chunk_codes = codes[chunk_idx]  # [batch, num_quantizers, time_frames]
-                        
-                        # Transpose to get [num_quantizers, batch, time_frames] which is what quantizer expects
-                        chunk_codes = chunk_codes.transpose(0, 1)  # [num_quantizers, batch, time_frames]
-                        
-                        # Decode this chunk
+                    for i in range(chunks):
+                        chunk_codes = codes[i]  # [batch, num_quantizers, time_frames]
+                        chunk_codes = chunk_codes.transpose(0, 1)  # -> [num_quantizers, batch, time_frames]
                         chunk_emb = self.model.quantizer.decode(chunk_codes)  # [batch, channels, time_frames]
                         chunk_embeddings.append(chunk_emb)
-                    
-                    # Concatenate all chunks along the time dimension
-                    quantized_embeddings = torch.cat(chunk_embeddings, dim=2)  # [batch, channels, total_time]
-                    
-                # elif codes.dim() == 3:
-                #     # Single chunk case: [num_quantizers, batch, time_frames]
-                #     quantized_embeddings = self.model.quantizer.decode(codes)
-                    
+                    quantized_embeddings = torch.cat(chunk_embeddings, dim=2)
                 else:
                     raise ValueError(f"Unexpected codes dimensions: {codes.shape}. Should be [chunks, batch, num_quantizers, time_frames]")
-
             else:
-                # Torchaudio 24kHz model
-                # codes are in [num_quantizers, batch, time_frames] format already
+                # Torchaudio: codes expected as [num_quantizers, batch, time_frames]
                 quantized_embeddings = self.model.quantizer.decode(codes)
-                
             return quantized_embeddings
 
     def decode_codes_audio(self, codes: torch.Tensor, metadata: Optional[dict] = None) -> torch.Tensor:
@@ -283,33 +359,20 @@ class EncodecProcessor:
         Returns:
             Reconstructed audio tensor
         """
-        with torch.no_grad():
-            if self.is_hf_model:
-                # HuggingFace 48kHz model - use complete decode pipeline
-                if metadata is None:
-                    raise ValueError("HuggingFace 48kHz model requires metadata (at least audio_scales) for proper reconstruction")
+        # Implement as composition: codes -> latents -> audio
+        latents = self.codes_to_latents(codes)
+        audio = self.decode_latents_audio(latents, metadata)
+        return audio
 
-                audio_scales = metadata['audio_scales']
-                # padding_mask = metadata['padding_mask']
-                
-                # Use the complete decode method which handles scales and padding properly
-                # reconstructed_audio = self.model.decode(codes, audio_scales, padding_mask)[0]
-                reconstructed_audio = self.model.decode(codes, audio_scales)[0]
-
-            else:
-                # Torchaudio 24kHz model - decode codes to embeddings then to audio
-                embeddings = self.model.quantizer.decode(codes)
-                reconstructed_audio = self.model.decoder(embeddings)
-            
-            return reconstructed_audio
-
-    def decode_emb_audio(self, embeddings: torch.Tensor, metadata: Optional[dict] = None) -> torch.Tensor:
+    def decode_latents_audio(self, embeddings: torch.Tensor, metadata: Optional[dict] = None) -> torch.Tensor:
         """
         Decode embeddings back to audio.
         Works for both continuous and quantized embeddings.
         
         Args:
             embeddings: Tensor of shape [batch, channels, time_frames]
+            metadata: Optional dict with 'audio_scales' and 'padding_mask'.
+                     If audio_scales is a list, we'll apply chunked decoding with overlap-add.
             
         Returns:
             Reconstructed audio tensor of shape [batch, channels, time]
@@ -317,24 +380,31 @@ class EncodecProcessor:
         with torch.no_grad():
             if self.is_hf_model:
                 # HuggingFace 48kHz model
-                if metadata is not None:
-                    # Use audio_scales and padding_mask for proper reconstruction
+                if metadata is not None and 'audio_scales' in metadata:
                     audio_scales = metadata.get('audio_scales', None)
                     padding_mask = metadata.get('padding_mask', None)
                     
-                    # For chunked encoding, we need to split the embeddings back to chunks
-                    # and apply the corresponding scale to each chunk's audio output
-                    if isinstance(audio_scales, list) and len(audio_scales) > 1:
-                        # Calculate chunk size in embedding frames
-                        total_frames = embeddings.shape[-1]  # 1050
-                        num_chunks = len(audio_scales)  # 7 
-                        chunk_size = total_frames // num_chunks  # 150
+                    # Check if we need chunked decoding (multiple scales means multiple chunks)
+                    if isinstance(audio_scales, list) and len(audio_scales) > 1 and all(s is not None for s in audio_scales):
+                        # CHUNKED DECODING PATH (for quantized embeddings from codes)
+                        # We need to know the expected chunk size from the model config
+                        cfg = self.model.config
+                        chunk_length = cfg.chunk_length
+                        stride = cfg.chunk_stride
                         
+                        # Calculate expected embedding chunk size
+                        # The encoder downsamples by hop_length (typically 320 for 48kHz)
+                        hop_length = np.prod([r for r in cfg.upsampling_ratios])  # typically 320
+                        expected_emb_chunk_size = chunk_length // hop_length  # e.g., 30720 / 320 = 96
+                        
+                        total_frames = embeddings.shape[-1]
+                        num_chunks = len(audio_scales)
+                        
+                        # Split embeddings into chunks based on expected chunk size
                         chunk_audio = []
                         for i in range(num_chunks):
-                            # Extract chunk from concatenated embeddings
-                            start_idx = i * chunk_size
-                            end_idx = start_idx + chunk_size if i < num_chunks - 1 else total_frames
+                            start_idx = i * expected_emb_chunk_size
+                            end_idx = min(start_idx + expected_emb_chunk_size, total_frames)
                             chunk_emb = embeddings[..., start_idx:end_idx]
                             scale = audio_scales[i]
                             
@@ -345,29 +415,31 @@ class EncodecProcessor:
                             chunk_audio.append(audio)
                         
                         # Use overlap-add to reconstruct full audio
-                        stride = getattr(self.model.config, 'chunk_stride', None)
-                        if stride is None:
-                            # Estimate stride from audio chunks
-                            stride = chunk_audio[0].shape[-1] // 2 if len(chunk_audio) > 1 else chunk_audio[0].shape[-1]
                         reconstructed_audio = self.model._linear_overlap_add(chunk_audio, stride)
                         
                         # Remove padding if mask is present
                         if padding_mask is not None and padding_mask.shape[-1] < reconstructed_audio.shape[-1]:
                             reconstructed_audio = reconstructed_audio[..., :padding_mask.shape[-1]]
                     else:
-                        # Single chunk case
-                        scale = audio_scales[0] if isinstance(audio_scales, list) else audio_scales
-                        # Decode to audio first, then apply scale
+                        # SINGLE-CHUNK or CONTINUOUS EMBEDDINGS PATH
+                        # Just decode directly without chunking/overlap-add
                         reconstructed_audio = self.model.decoder(embeddings)
-                        if scale is not None:
+                        
+                        # Apply single scale if available
+                        if isinstance(audio_scales, list) and len(audio_scales) > 0 and audio_scales[0] is not None:
+                            scale = audio_scales[0]
                             reconstructed_audio = reconstructed_audio * scale.view(-1, 1, 1)
+                        elif audio_scales is not None and not isinstance(audio_scales, list):
+                            reconstructed_audio = reconstructed_audio * audio_scales.view(-1, 1, 1)
+                        
+                        # Trim to padding mask if present
                         if padding_mask is not None and padding_mask.shape[-1] < reconstructed_audio.shape[-1]:
                             reconstructed_audio = reconstructed_audio[..., :padding_mask.shape[-1]]
                 else:
+                    # No metadata - just decode directly
                     reconstructed_audio = self.model.decoder(embeddings)
             else:
-                # HuggingFace 24kHz model
-                # Decode from embeddings
+                # Torchaudio 24kHz model - simple decode
                 reconstructed_audio = self.model.decoder(embeddings)
             
             return reconstructed_audio
@@ -427,7 +499,7 @@ if __name__ == "__main__":
         # Test continuous encoding/decoding
         print("\n=== Testing Continuous Path ===")
         cont_embeddings = processor.encode_audio_emb(test_audio)
-        cont_reconstructed = processor.decode_emb_audio(cont_embeddings)
+        cont_reconstructed = processor.decode_latents_audio(cont_embeddings)
         
         print(f"Continuous embeddings shape: {cont_embeddings.shape}")
         print(f"Continuous reconstructed shape: {cont_reconstructed.shape}")
@@ -439,7 +511,7 @@ if __name__ == "__main__":
             codes, metadata = codes_result
             # Test the full pipeline: codes -> embeddings -> audio
             quant_embeddings = processor.decode_codes_emb(codes, metadata)
-            quant_reconstructed_from_emb = processor.decode_emb_audio(quant_embeddings)
+            quant_reconstructed_from_emb = processor.decode_latents_audio(quant_embeddings)
             # Also test direct codes -> audio
             quant_reconstructed = processor.decode_codes_audio(codes, metadata)
             print(f"Quantized embeddings shape: {quant_embeddings.shape}")
@@ -447,7 +519,7 @@ if __name__ == "__main__":
         else:
             codes, _ = codes_result
             quant_embeddings = processor.decode_codes_emb(codes)
-            quant_reconstructed = processor.decode_emb_audio(quant_embeddings)
+            quant_reconstructed = processor.decode_latents_audio(quant_embeddings)
         
         print(f"Audio codes shape: {codes.shape}")
         print(f"Quantized reconstructed shape: {quant_reconstructed.shape}")
