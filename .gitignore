@@ -2,5 +2,9 @@
 __pycache__/
 
 # directories
-samples/
 old_stuff/
+
+# samples
+*.wav
+# exceptions
+!guitar.wav

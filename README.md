@@ -5,8 +5,8 @@
 
 1. **Create a virtual environment and activate it (recommended):**
 
-		python3 -m venv venv_latent_stats
-		source venv_latent_stats/bin/activate
+		python3 -m venv venv_audio_codec_wrappers
+		source venv_audio_codec_wrappers/bin/activate
 
 2. **Install requirements:**
 	
