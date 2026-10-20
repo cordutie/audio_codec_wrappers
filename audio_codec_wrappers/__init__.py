@@ -12,3 +12,6 @@ def configure_jax_env() -> None:
 
 
 configure_jax_env()
+
+from .base import CodecInfo, CodecWrapper, Encoded, StreamingDecoder  # noqa: E402
+from .registry import codec_info, list_codecs, load_codec, register  # noqa: E402
