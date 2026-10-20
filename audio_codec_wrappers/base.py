@@ -92,7 +92,7 @@ class WindowDecoder(StreamingDecoder):
         out[..., (first - lo) * h:] = y[..., first * h:(lo + n) * h]
         # keep the last window_frames frames
         joined = torch.cat([past, z], dim=-1)
-        self.past = joined[..., joined.shape[-1] - self.window_frames:] if self.window_frames > 0 else joined[..., :0]
+        self.past = joined[..., max(joined.shape[-1] - self.window_frames, 0):] if self.window_frames > 0 else joined[..., :0]
         return out
 
     def flush(self) -> torch.Tensor:
