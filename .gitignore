@@ -8,3 +8,11 @@ old_stuff/
 *.wav
 # exceptions
 !guitar.wav
+# build artefacts and caches
+*.egg-info/
+.pytest_cache/
+
+# weights and runs
+*.pt
+*.safetensors
+runs/

@@ -1,7 +1,61 @@
-torch>=1.9.0
-torchaudio>=0.9.0
-transformers>=4.21.0
-encodec>=0.1.1
-librosa>=0.8.0
-numpy
-dac
+# audio_codec_wrappers: pinned dependency set (torch + jax in one environment).
+#
+# requirements.lock is the exact environment of the results (pip freeze of
+# venv_audio_codec_wrappers). This file states the intended pins and why.
+#
+# Install order (scripts/install_env.sh):
+#   1. pip install torch==2.10.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128
+#   2. pip install -r requirements.txt
+#   3. pip install --no-deps -r requirements-git.txt   (magenta-rt, codicodec)
+#   4. pip install --no-deps -e .
+#   5. pip freeze > requirements.lock
+
+# torch: same build as venv_SCAPES (2.10.0+cu128). Installed first from the
+# cu128 index (step 1); the pins below are then already satisfied.
+torch==2.10.0
+torchaudio==2.10.0
+
+# numpy 2: jax 0.10.1 requires numpy>=2; numba 0.64 in SCAPES requires numpy<2.5.
+numpy==2.3.5
+
+# jax on CUDA 12: the magenta-rt lock pins jax/jaxlib 0.10.1; the cuda12 plugin's
+# cuDNN/cuBLAS/NCCL ranges contain torch 2.10's pins (cudnn 9.10.2.21,
+# cublas 12.8.4.1, nccl 2.27.5), so both frameworks share one CUDA stack.
+jax[cuda12]==0.10.1
+jaxlib==0.10.1
+
+# SpectroStream import chain (magenta_rt.jax.spectrostream + vendored
+# sequence_layers), versions from magenta-rt's uv.lock. magenta-rt itself is
+# installed --no-deps (requirements-git.txt) to avoid ai-edge-litert,
+# google-cloud-storage, sentencepiece and other packages the codec never imports.
+flax==0.12.7
+einops==0.8.2
+jaxtyping==0.3.10
+typeguard==2.13.3
+recurrentgemma[jax]==1.0.1
+scipy==1.17.1
+
+# HF EnCodec 48k; same version as venv_SCAPES.
+transformers==5.18.0
+
+# EnCodec 24k (official package; latent = model.encoder(x)).
+encodec==0.1.1
+
+# codicodec imports librosa and soundfile; same versions as venv_SCAPES.
+librosa==0.10.2.post1
+soundfile==0.13.1
+
+# Pinned at install, 2026-10-20 (versions resolved in step 2).
+safetensors==0.8.0
+huggingface_hub==2.2.0
+pytest==9.1.1
+
+# Notes from the install on 2026-10-20 (architect, task "tests"):
+# - the set resolves with no conflict (pip check clean); torch stays 2.10.0+cu128 and shares
+#   cudnn 9.10.2.21 / cublas 12.8.4.1 / nccl 2.27.5 with jax-cuda12-plugin 0.10.1;
+# - unpinned transitive versions differ from magenta-rt's uv.lock (orbax-checkpoint 0.12.7 vs 0.12.0,
+#   ml_dtypes 0.6.0 vs 0.5.4, protobuf 7.36.2 vs 7.35.0); librosa pulls numba 0.68.0 here
+#   (venv_SCAPES keeps 0.64.0). requirements.lock records the exact versions;
+# - magenta-rt and codicodec install --no-deps from requirements-git.txt; the vendored
+#   sequence_layers is importable after `import magenta_rt` (its import hook), so the
+#   sequence-layers fallback line is not needed.

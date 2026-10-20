@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audio-codec-wrappers"
+version = "0.1.0"
+description = "One API (encode, decode, streaming decoder) for several neural audio codecs."
+requires-python = ">=3.11"
+# No dependencies listed: requirements.txt and requirements-git.txt own them (D2).
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["audio_codec_wrappers*"]
