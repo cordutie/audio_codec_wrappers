@@ -1,8 +1,10 @@
+# Frozen 2026-10-21 (slice A6). The package line installs the working tree (run from the repository root);
+# it replaces the git URL pip freeze writes for an editable install (that URL pointed at an old commit).
 absl-py==1.4.0
 aiofiles==25.1.0
 annotated-doc==0.0.5
 anyio==4.15.1
--e git+https://github.com/cordutie/audio_codec_wrappers@8118eba44a9a027ff5545dfc706656785122dff5#egg=audio_codec_wrappers
+-e .
 audioread==3.1.0
 certifi==2026.10.19
 cffi==2.1.1
@@ -10,14 +12,17 @@ charset-normalizer==3.5.2
 click==8.5.0
 cloudpickle==3.1.2
 codicodec @ git+https://github.com/SonyCSLParis/codicodec@1239148096a5b6725eeabb62eb950d064a951c64
+contourpy==1.4.0
 cuda-bindings==12.9.4
 cuda-pathfinder==1.6.0
+cycler==0.12.1
 decorator==5.3.1
 einops==0.8.2
 encodec==0.1.1
 etils==1.14.0
 filelock==3.32.3
 flax==0.12.7
+fonttools==4.67.0
 fsspec==2026.7.0
 h11==0.16.0
 hf-xet==1.7.0
@@ -34,12 +39,14 @@ jaxlib==0.10.1
 jaxtyping==0.3.10
 Jinja2==3.1.6
 joblib==1.6.0
+kiwisolver==1.5.1
 lazy-loader==0.6
 librosa==0.10.2.post1
 llvmlite==0.50.0
 magenta-rt @ git+https://github.com/magenta/magenta-realtime@694a545e4ba0b88bf1150137b129582166d3e07f
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
+matplotlib==3.11.2
 mdurl==0.1.2
 ml_dtypes==0.6.0
 mpmath==1.3.0
@@ -68,6 +75,7 @@ opt_einsum==3.4.0
 optax==0.2.8
 orbax-checkpoint==0.12.7
 packaging==26.3
+pillow==13.0.0
 platformdirs==4.13.5
 pluggy==1.7.0
 pooch==1.9.0
@@ -76,7 +84,9 @@ protobuf==7.36.2
 psutil==7.2.2
 pycparser==3.11
 Pygments==2.21.0
+pyparsing==3.3.3
 pytest==9.1.1
+python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 recurrentgemma==1.0.1
 regex==2026.9.29
@@ -89,6 +99,7 @@ sentencepiece==0.2.2
 setuptools==78.1.0
 shellingham==1.5.4
 simplejson==4.2.0
+six==1.17.0
 soundfile==0.13.1
 soxr==1.1.0
 sympy==1.14.0

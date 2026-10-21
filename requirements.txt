@@ -49,6 +49,8 @@ soundfile==0.13.1
 safetensors==0.8.0
 huggingface_hub==2.2.0
 pytest==9.1.1
+# figures of scripts/roundtrip_report.py and scripts/window_report.py (added in slice A6)
+matplotlib==3.11.2
 
 # Notes from the install on 2026-10-20 (architect, task "tests"):
 # - the set resolves with no conflict (pip check clean); torch stays 2.10.0+cu128 and shares
