@@ -55,7 +55,7 @@ def fetch(codec: str, route: str) -> dict:
     files = {}
     for name in src[route]:
         path = pathlib.Path(hf_hub_download(src["repo"], name, revision=revision, local_dir=out))
-        files[name] = {"path": str(path), "bytes": path.stat().st_size, "sha256": sha256_of(path)}
+        files[name] = {"path": str(path).replace(str(pathlib.Path.home()), "~"), "bytes": path.stat().st_size, "sha256": sha256_of(path)}
         print(f"{codec}: {name} {files[name]['bytes']} bytes sha256 {files[name]['sha256'][:12]}")
     return {"source": f"hf:{src['repo']}", "revision": revision, "route": route, "files": files}
 

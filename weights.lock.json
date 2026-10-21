@@ -6,12 +6,12 @@
       "route": "codec",
       "files": {
         "resources/spectrostream/encoder.safetensors": {
-          "path": "/home/esteban/.cache/audio_codec_wrappers/spectrostream/resources/spectrostream/encoder.safetensors",
+          "path": "~/.cache/audio_codec_wrappers/spectrostream/resources/spectrostream/encoder.safetensors",
           "bytes": 37013392,
           "sha256": "f20c197ddcbb9cd43e1a97f9bee0d07d211f79966cd3862d9830a32885090f72"
         },
         "resources/spectrostream/decoder.safetensors": {
-          "path": "/home/esteban/.cache/audio_codec_wrappers/spectrostream/resources/spectrostream/decoder.safetensors",
+          "path": "~/.cache/audio_codec_wrappers/spectrostream/resources/spectrostream/decoder.safetensors",
           "bytes": 209853216,
           "sha256": "0ac6f100a24945fb434783fde6acd7902ceaa8bca492ca317edfc75dd51c42dd"
         }
@@ -25,7 +25,7 @@
       "route": "codec",
       "files": {
         "codicodec.pt": {
-          "path": "/home/esteban/.cache/audio_codec_wrappers/codicodec/codicodec.pt",
+          "path": "~/.cache/audio_codec_wrappers/codicodec/codicodec.pt",
           "bytes": 594441978,
           "sha256": "27827ac41100386193fa4fd04d783c62d526a7b06ffa9e9252992eb3eb4bdb6c"
         }
