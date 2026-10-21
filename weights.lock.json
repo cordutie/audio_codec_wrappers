@@ -17,5 +17,19 @@
         }
       }
     }
+  },
+  "codicodec": {
+    "codec": {
+      "source": "hf:SonyCSLParis/codicodec",
+      "revision": "f6aa343c06104f743563e86485e69e55dfd30d58",
+      "route": "codec",
+      "files": {
+        "codicodec.pt": {
+          "path": "/home/esteban/.cache/audio_codec_wrappers/codicodec/codicodec.pt",
+          "bytes": 594441978,
+          "sha256": "27827ac41100386193fa4fd04d783c62d526a7b06ffa9e9252992eb3eb4bdb6c"
+        }
+      }
+    }
   }
 }
