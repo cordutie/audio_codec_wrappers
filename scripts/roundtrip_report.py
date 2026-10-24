@@ -224,7 +224,8 @@ def make_figures(results: dict, tau: dict | None, out: pathlib.Path) -> None:
     fig.savefig(out / "rho_nu.png", dpi=130)
     plt.close(fig)
     # envelope correlations: reconstruction against delayed copy, one panel per codec
-    fig, axes = plt.subplots(1, len(codecs), figsize=(3.2 * len(codecs), 3.6), sharey=True)
+    fig, axes = plt.subplots(1, len(codecs), figsize=(3.2 * len(codecs), 3.6), sharey=True, squeeze=False)
+    axes = axes[0]
     for ax, codec in zip(axes, codecs):
         for ci, clip in enumerate(clips):
             for r in results[codec][clip]["seeds"].values():
