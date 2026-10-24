@@ -76,6 +76,8 @@ register("encodec48k", CodecInfo("encodec48k", 48000, 2, 320, 128, 1, False, Non
          _lazy("encodec48", "Encodec48Codec"))
 register("codicodec", CodecInfo("codicodec", 44100, 2, 4096, 64, 8, False, None, False, True, "torch"),
          _lazy("codicodec", "CoDiCodecCodec"))
+register("music2latent", CodecInfo("music2latent", 44100, 2, 4096, 128, 1, False, None, False, True, "torch"),
+         _lazy("music2latent", "Music2LatentWrapper"))
 register("toy_causal", CodecInfo("toy_causal", 8000, 1, 8, 16, 1, True, 0, False, False, "torch"), _toy("toy_causal"))
 register("toy_noncausal", CodecInfo("toy_noncausal", 8000, 1, 8, 16, 1, False, None, True, False, "torch"),
          _toy("toy_noncausal"))

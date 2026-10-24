@@ -31,5 +31,19 @@
         }
       }
     }
+  },
+  "music2latent": {
+    "codec": {
+      "source": "hf:SonyCSLParis/music2latent",
+      "revision": "faab47a447a2b663c77df2969e984e411e1d0c8d",
+      "route": "codec",
+      "files": {
+        "music2latent.pt": {
+          "path": "~/.cache/huggingface/hub/models--SonyCSLParis--music2latent/snapshots/faab47a447a2b663c77df2969e984e411e1d0c8d/music2latent.pt",
+          "bytes": 232974695,
+          "sha256": "c24bc1d017d97fdb70db340fdef1d650eec33b7b7bac2a4ca026b7fed87eea36"
+        }
+      }
+    }
   }
 }
