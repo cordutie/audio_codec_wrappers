@@ -32,6 +32,8 @@ m2l_inference.download_model = lambda: None
 # clip differ by up to 4e-3 between a batch and a single call, so the wrapper runs plain fp32 as the other codecs do.
 # The flag is read at call time from the namespaces of inference.py and utils.py (decoder).
 import music2latent.utils as m2l_utils  # noqa: E402
+import music2latent.audio as m2l_audio  # noqa: E402
+import music2latent.hparams_inference as m2l_hparams_inference  # noqa: E402
 m2l_inference.mixed_precision = False
 m2l_utils.mixed_precision = False
 
@@ -120,3 +122,37 @@ class Music2LatentWrapper(CodecWrapper):
                     y = self.encdec.decode(zi.reshape(2, 64, T), denoising_steps=1)    # [2, samples]
                 outs.append(torch.as_tensor(y).float().to(self.device)[None, :, : T * HOP])
         return torch.cat(outs, dim=0)
+
+    def redenoise(self, audio, z, sigma, seed=0, noise=True):
+        """Consistency re-denoising of an assembled output (GLaRe design 3b D). audio [B, 2, n] at 44.1 kHz, z [B, 128, T]
+        the latents that condition the decoder -> [B, 2, n]. The audio's STFT representation (cropped or zero-padded to
+        the 8T frames the decoder produces) gets sigma * eps (eps seeded in a forked RNG, none if noise=False), the
+        consistency function maps it to a clean one given z, and the inverse STFT is trimmed to n. At sigma = 0.002
+        and noise=False this is the STFT round trip of the audio (c_skip = 1, c_out = 0)."""
+        audio = audio.to(self.device).float()
+        z = z.to(self.device).float()
+        B, C, n = audio.shape
+        T = z.shape[-1]
+        rows = audio.reshape(B * C, n)
+        lat = z.reshape(B * C, 64, T) * m2l_hparams_inference.sigma_rescale        # as in decode_latent_inference
+        devices = [self.device] if self.device.type == "cuda" else []
+        with torch.no_grad(), _full_precision():
+            r = m2l_audio.to_representation(rows)                                  # [rows, 2, 1024, frames]
+            frames = 8 * T
+            r = r[..., :frames]
+            if r.shape[-1] < frames:
+                r = torch.nn.functional.pad(r, (0, frames - r.shape[-1]))
+            if noise:
+                with torch.random.fork_rng(devices=devices):
+                    torch.manual_seed(int(seed))
+                    if self.device.type == "cuda":
+                        torch.cuda.manual_seed_all(int(seed))
+                    eps = torch.randn(r.shape, device=r.device)
+                r = r + sigma * eps
+            sig = torch.full((r.shape[0],), float(sigma), dtype=torch.float32, device=r.device)
+            _, pred = m2l_utils.denoise(self.encdec.gen, r, sig, lat)
+            y = m2l_audio.to_waveform(pred)                                        # [rows, 4096 T + 1536]
+        y = y[:, :n]
+        if y.shape[-1] < n:
+            y = torch.nn.functional.pad(y, (0, n - y.shape[-1]))
+        return y.reshape(B, C, n).float()
