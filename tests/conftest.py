@@ -22,12 +22,11 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 PROJECT = REPO.parent
 GUITAR = REPO / "samples" / "guitar.wav"
 
-REAL_CODECS = ["encodec24k", "spectrostream", "encodec48k", "codicodec", "music2latent"]
+REAL_CODECS = ["encodec24k", "spectrostream", "encodec48k", "music2latent"]
 TOY_CODECS = ["toy_causal", "toy_noncausal"]
 ALL_CODECS = REAL_CODECS + TOY_CODECS
 CAUSAL_CODECS = ["encodec24k", "spectrostream", "toy_causal"]
-NONCAUSAL_CODECS = ["encodec48k", "codicodec", "music2latent", "toy_noncausal"]
-CODICODEC_SEEDS = [0, 1, 2]
+NONCAUSAL_CODECS = ["encodec48k", "music2latent", "toy_noncausal"]
 
 DEVICE = "cuda"
 

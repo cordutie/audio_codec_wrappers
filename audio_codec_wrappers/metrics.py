@@ -78,7 +78,7 @@ def fidelity_report(x, x_hat, sample_rate: int, codec_info, noise_seed: int = 0)
     nu = nu * (x.pow(2).mean().sqrt() / nu.pow(2).mean().sqrt())
     m_hat = log_mel_distance(x, x_hat, sample_rate)
     m_noise = log_mel_distance(x, nu, sample_rate)
-    delta_s = 0.25 if codec_info.name == "codicodec" else 0.05
+    delta_s = 0.05
     delayed = _delay(x, int(round(delta_s * sample_rate)))
     return {
         "rho_nu": m_hat / m_noise,

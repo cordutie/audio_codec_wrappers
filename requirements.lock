@@ -11,7 +11,6 @@ cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.0
 cloudpickle==3.1.2
-codicodec @ git+https://github.com/SonyCSLParis/codicodec@1239148096a5b6725eeabb62eb950d064a951c64
 contourpy==1.4.0
 cuda-bindings==12.9.4
 cuda-pathfinder==1.6.0

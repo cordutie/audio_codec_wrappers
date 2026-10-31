@@ -1,6 +1,6 @@
 # audio_codec_wrappers
 
-One API for several neural audio codecs (EnCodec 24 kHz, EnCodec 48 kHz, SpectroStream, CoDiCodec), used to turn
+One API for several neural audio codecs (EnCodec 24 kHz, EnCodec 48 kHz, SpectroStream), used to turn
 audio into continuous latents `[B, d, T]` and back. The legacy EnCodec and DAC processors (`processors/`) and their
 example notebooks are unchanged; see the last section.
 
@@ -9,7 +9,7 @@ example notebooks are unchanged; see the last section.
 From this folder, with the environment next to the repository (`../venv_audio_codec_wrappers`):
 
     bash scripts/install_env.sh                       # torch 2.10.0+cu128, pinned set, git dependencies, this package (editable)
-    ../venv_audio_codec_wrappers/bin/python scripts/fetch_weights.py --codec all   # SpectroStream and CoDiCodec weights, sha256 in weights.lock.json
+    ../venv_audio_codec_wrappers/bin/python scripts/fetch_weights.py --codec all   # SpectroStream weights, sha256 in weights.lock.json
     ../venv_audio_codec_wrappers/bin/python -m pytest -p no:cacheprovider tests -q -rs
 
 `requirements.lock` is the exact `pip freeze` of the environment used for the reports. Its first line installs the
@@ -33,14 +33,13 @@ EnCodec 24k and 48k download their weights through their own packages on first u
   of `z`, where `L` is `dec.latency_samples`. Non-causal codecs raise `NotImplementedError`.
 - `window_decoder(window_frames)` re-decodes the last `window_frames` latents from a fresh state. It exists only as the
   instrument of `scripts/window_report.py`; it is not a decoding mode.
-- `codec_info(name)` is static (no jax, transformers, encodec or codicodec import).
+- `codec_info(name)` is static (no jax, transformers or encodec import).
 
 | name | rate | channels | hop h | latent d | frame rate | quantum q | causal | latency L | scale | stochastic decoder | backend |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `encodec24k` | 24000 | 1 | 320 | 128 | 75 Hz | 1 | yes | 0 | no | no | torch |
 | `spectrostream` | 48000 | 2 | 1920 | 256 | 25 Hz | 1 | yes | 1920 samples (1 frame, 40 ms) | no | no | jax |
 | `encodec48k` | 48000 | 2 | 320 | 128 | 150 Hz | 1 | no | none | yes (per-item RMS) | no | torch |
-| `codicodec` | 44100 | 2 | 4096 | 64 | 10.77 Hz | 8 | no | none | no | yes | torch |
 | `toy_causal`, `toy_noncausal` | 8000 | 1 | 8 | 16 | 1000 Hz | 1 | yes / no | 0 / none | no / yes | no | torch |
 
 Tools: `scripts/roundtrip_report.py` (S1 fidelity, alignment, streaming errors, calibration of `s1_thresholds.json`) and
@@ -53,10 +52,6 @@ Tools: `scripts/roundtrip_report.py` (S1 fidelity, alignment, streaming errors, 
   8.5 GiB of GPU memory; with it 0.6 s and 0.3 GiB (slice A2 measurement). Both are in the `env.json` of the reports.
 - **JAX matmul precision.** The SpectroStream calls run under `jax.default_matmul_precision("highest")` (full fp32).
   With the default (TF32) one-shot and streaming decoding differed by about 1e-3.
-- **CoDiCodec runs in fp32.** The library wraps the encoder and decoder in fp16 autocast; the wrapper switches that off
-  (`codicodec.utils.mixed_precision = False`), because fp16 rounding moved latents of equal audio by up to 2e-2. The
-  library also sets global torch flags (cudnn benchmark, TF32, fp16 reductions) at import; the wrapper restores the
-  values that were in place before the import.
 - **EnCodec 24k.** The encoder runs with torch's default TF32 settings, one item at a time. TF32 rounding makes its
   output depend on the batch composition by about 1e-2 relative, which is why items are encoded one by one. The
   decoder runs with TF32 off; with it on, streaming and one-shot decoding differ by 2.5e-3 instead of 2e-6.
@@ -77,17 +72,6 @@ latency. Weights: the codec-only `encoder/decoder.safetensors` of `google/magent
 
 **EnCodec 48k** (HF `facebook/encodec_48khz`, no chunking, no overlap). The input is divided by its RMS and the decoder
 output multiplied back; the RMS is the `scale` returned by `encode`. Equal to the legacy `EncodecProcessor(sr=48000)`.
-
-**CoDiCodec** (Sony CSL, arXiv 2509.09836). 44.1 kHz stereo; one chunk is 32,768 samples and gives 8 latent frames of 64
-channels (`z[0, c, 8i+j]` = chunk `i`, row `j`; the 8 frames of a chunk are a reshape of 128 summary embeddings, not
-temporally ordered, hence frame quantum 8). The latent is the library encode (already `atanh(.)/0.8`, about +/-4.75).
-The library processes a chunk as 32,768 + 1,024 samples (the extra 1,024 are the STFT tail); the wrapper keeps the
-first `T*h`. The decoder is stochastic (consistency sampler, 5 parallel steps): `decode(..., seed=s)` runs inside a
-forked RNG with `torch.manual_seed(s)`, so the same seed gives the same audio and the caller's global RNG state is
-unchanged; `seed=None` uses the global RNG. The encoder is extremely sensitive to its input: a 1e-7 change of the
-audio moved a latent by 1.3e-2 (guitar). The wrapper therefore resamples on the CPU, whatever the device.
-**Licence: CC BY-NC 4.0** (non-commercial), weights and code from `SonyCSLParis/codicodec`; the weights file is a
-pickle and is loaded only if its sha256 matches `weights.lock.json`.
 
 ## Reports
 

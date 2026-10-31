@@ -24,7 +24,7 @@ class CodecInfo:
     normalizes_input: bool = False   # True iff encode returns a scale
     stochastic_decoder: bool = False
     backend: str = "torch"           # "torch" | "jax"
-    weights: str = ""                # weights id, e.g. "hf:SonyCSLParis/codicodec@<sha256[:12]>"
+    weights: str = ""                # weights id, e.g. "hf:<repo>@<sha256[:12]>"
 
     @property
     def frame_rate(self) -> float:

@@ -6,8 +6,5 @@
 # fallback below is NOT needed.
 magenta-rt @ git+https://github.com/magenta/magenta-realtime@694a545e4ba0b88bf1150137b129582166d3e07f
 
-# CoDiCodec.
-codicodec @ git+https://github.com/SonyCSLParis/codicodec@1239148096a5b6725eeabb62eb950d064a951c64
-
 # Fallback, only if `import sequence_layers.jax` fails after the magenta-rt install:
 # sequence-layers @ git+https://github.com/magenta/sequence-layers@c85a637a1afae8f4f2d4edb458f2111b5f44ae52

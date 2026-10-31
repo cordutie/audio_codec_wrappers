@@ -1,14 +1,14 @@
 """Slices A1-A5: the common API contract, parametrised over every registered codec (design S1 (i)-(vi), D3, D19).
 
 At A1 only the toy_* parametrisations are expected to pass; the real codecs are checked in A2-A5
-(`-k spectrostream`, `-k encodec24`, `-k encodec48`, `-k codicodec`).
+(`-k spectrostream`, `-k encodec24`, `-k encodec48`, `-k music2latent`).
 """
 import functools
 
 import pytest
 import torch
 
-from conftest import (ALL_CODECS, CAUSAL_CODECS, CODICODEC_SEEDS, NONCAUSAL_CODECS, chunk_sizes, load_guitar,
+from conftest import (ALL_CODECS, CAUSAL_CODECS, NONCAUSAL_CODECS, chunk_sizes, load_guitar,
                       max_abs, stream)
 
 
@@ -25,7 +25,7 @@ def _roundtrip(name: str, seed: int = 0):
 
 
 def _seeds(name):
-    return CODICODEC_SEEDS if name == "codicodec" else [0]
+    return [0]
 
 
 @pytest.mark.parametrize("name", ALL_CODECS)
@@ -80,7 +80,7 @@ def test_envelope_timing(name, get_codec):
     """F3: on the non-stationary guitar, c(x, x_hat) >= c(x, x delayed by delta) - 0.005 (tie tolerance, Esteban 2026-10-21)."""
     from audio_codec_wrappers.metrics import fidelity_report
     info = get_codec(name).info
-    want_delta = 0.25 if name == "codicodec" else 0.05
+    want_delta = 0.05
     for seed in _seeds(name):
         xp, _, y = _roundtrip(name, seed)
         n = xp.shape[-1]

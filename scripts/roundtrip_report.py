@@ -25,7 +25,7 @@ from audio_codec_wrappers import list_codecs, load_codec  # noqa: E402
 from audio_codec_wrappers.audio import load_audio  # noqa: E402
 from audio_codec_wrappers.metrics import fidelity_report, s1_thresholds  # noqa: E402
 
-REAL_CODECS = ["encodec24k", "spectrostream", "encodec48k", "codicodec"]
+REAL_CODECS = ["encodec24k", "spectrostream", "encodec48k"]
 F3_TIE = 0.005  # tie tolerance of the locked test (Esteban, 2026-10-21)
 LAG_MAX = 256  # samples, one envelope hop
 STREAM_TOL = 1e-4  # GPU streaming tolerance (design S1 (v))
@@ -106,7 +106,6 @@ def environment() -> dict:
         "XLA_FLAGS": __import__("os").environ.get("XLA_FLAGS"),
         "XLA_PYTHON_CLIENT_PREALLOCATE": __import__("os").environ.get("XLA_PYTHON_CLIENT_PREALLOCATE"),
         "jax_matmul_precision": "highest (jax.default_matmul_precision decorator inside the spectrostream wrapper)",
-        "codicodec_precision": "fp32 (library fp16 autocast switched off in the wrapper)",
     }
     try:
         import jax
@@ -307,7 +306,7 @@ def main() -> None:
     if args.calibrate:
         calib = {n: [v["rho_nu"] for r in results[n].values() for v in r["seeds"].values()] for n in results}
         tau = s1_thresholds(calib)
-        thr = {"tau": tau, "rule": "min(0.9, 1.5 * max over K of rho_nu); CoDiCodec: max over its seeds too",
+        thr = {"tau": tau, "rule": "min(0.9, 1.5 * max over K of rho_nu)",
                "calibration_rho_nu": {n: {c: {s: v["rho_nu"] for s, v in r["seeds"].items()} for c, r in results[n].items()} for n in results},
                "calibration_clips": args.clips, "seeds": args.seeds}
         (out / "s1_thresholds.json").write_text(json.dumps(thr, indent=2))

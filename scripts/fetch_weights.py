@@ -1,6 +1,6 @@
 """Downloads codec weights into the cache and records them in weights.lock.json.
 
-    python scripts/fetch_weights.py --codec spectrostream|codicodec [--route codec|full]
+    python scripts/fetch_weights.py --codec spectrostream [--route codec|full]
 
 Cache: ~/.cache/audio_codec_wrappers/<codec>/ (override with env ACW_CACHE).
 weights.lock.json (repo root) holds, per codec: source repo, revision, route, and for every file the local
@@ -23,12 +23,6 @@ SOURCES = {
         "codec": ["resources/spectrostream/encoder.safetensors", "resources/spectrostream/decoder.safetensors"],
         # route 2 (fallback): params['soundstream'] of the full model checkpoint (9.8 GB)
         "full": ["checkpoints/mrt2_base.safetensors"],
-    },
-    # one pickle checkpoint (torch.load with weights_only=False): official HF repo only; the wrapper checks the
-    # sha256 recorded here before loading it
-    "codicodec": {
-        "repo": "SonyCSLParis/codicodec",
-        "codec": ["codicodec.pt"],
     },
 }
 

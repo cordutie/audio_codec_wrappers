@@ -69,6 +69,5 @@ def test_imports():
     # (route recorded in requirements-git.txt; the fallback is a direct sequence-layers install).
     import magenta_rt.jax.spectrostream  # noqa: F401
     import sequence_layers.jax  # noqa: F401
-    import codicodec  # noqa: F401
     import encodec  # noqa: F401
     from transformers import EncodecModel  # noqa: F401
