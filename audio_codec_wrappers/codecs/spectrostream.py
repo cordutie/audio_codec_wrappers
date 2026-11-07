@@ -191,6 +191,7 @@ class SpectroStreamCodec(CodecWrapper):
         wav = torch_to_jax(audio.transpose(1, 2))  # [B, M, 2]
         try:
             emb = self._encode_fn(self.variables, wav)
+            emb.block_until_ready()   # JAX runs asynchronously: without this an out-of-memory only shows later, outside the try
         except jax.errors.JaxRuntimeError as e:
             if "RESOURCE_EXHAUSTED" not in str(e):
                 raise
