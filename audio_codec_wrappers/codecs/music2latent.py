@@ -17,7 +17,7 @@ import torch
 from ..base import CodecWrapper
 from ..registry import codec_info
 
-REPO = pathlib.Path(__file__).resolve().parents[2]
+REPO = pathlib.Path(__file__).resolve().parents[1]   # the package folder: weights.lock.json is inside it, so it is installed with the package
 REPO_ID = "SonyCSLParis/music2latent"
 REVISION = "faab47a447a2b663c77df2969e984e411e1d0c8d"
 FILE = "music2latent.pt"

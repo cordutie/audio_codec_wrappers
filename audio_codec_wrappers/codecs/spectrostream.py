@@ -29,7 +29,7 @@ import magenta_rt.jax.spectrostream as ss  # noqa: E402
 
 from ..jax_bridge import jax_to_torch, torch_to_jax  # noqa: E402
 
-REPO = pathlib.Path(__file__).resolve().parents[2]
+REPO = pathlib.Path(__file__).resolve().parents[1]   # the package folder: weights.lock.json is inside it, so it is installed with the package
 ENCODE_PIECE_SECONDS = 30  # whole-file encode falls back to pieces of this length if the GPU runs out of memory
 
 

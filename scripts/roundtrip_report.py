@@ -116,7 +116,7 @@ def environment() -> dict:
     env["git_sha"] = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     env["git_dirty"] = bool(subprocess.run(["git", "-C", str(REPO), "status", "--porcelain", "--untracked-files=no"],
                                            capture_output=True, text=True).stdout.strip())
-    env["weights_lock"] = json.loads((REPO / "weights.lock.json").read_text()) if (REPO / "weights.lock.json").exists() else None
+    env["weights_lock"] = json.loads((REPO / "audio_codec_wrappers" / "weights.lock.json").read_text()) if (REPO / "audio_codec_wrappers" / "weights.lock.json").exists() else None
     env["command"] = " ".join(sys.argv)
     return env
 

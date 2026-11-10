@@ -3,7 +3,7 @@
     python scripts/fetch_weights.py --codec spectrostream [--route codec|full]
 
 Cache: ~/.cache/audio_codec_wrappers/<codec>/ (override with env ACW_CACHE).
-weights.lock.json (repo root) holds, per codec: source repo, revision, route, and for every file the local
+audio_codec_wrappers/weights.lock.json holds, per codec: source repo, revision, route, and for every file the local
 path, bytes and sha256.
 """
 import argparse
@@ -13,7 +13,7 @@ import os
 import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-LOCK = REPO / "weights.lock.json"
+LOCK = REPO / "audio_codec_wrappers" / "weights.lock.json"
 
 # per codec and route: HF repo, files to fetch
 SOURCES = {

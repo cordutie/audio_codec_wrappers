@@ -12,3 +12,6 @@ dependencies = []
 
 [tool.setuptools.packages.find]
 include = ["audio_codec_wrappers*"]
+
+[tool.setuptools.package-data]
+audio_codec_wrappers = ["weights.lock.json"]
